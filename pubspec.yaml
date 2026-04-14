@@ -16,6 +16,7 @@ dependencies:
   # Camera & Image Processing
   camera: ^0.12.0+1
   image: ^4.1.3
+  path_provider: ^2.1.1
   
   # ML Kit
   google_mlkit_image_labeling: ^0.14.2
@@ -51,5 +52,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/sounds/
-    - assets/models/ # Create this folder and place your CNN model here (e.g., mobilenet_v2.tflite)
-    - assets/models/labels.txt # Text file containing the labels for your CNN
+    - assets/models/
+    - assets/models/labels.txt
+

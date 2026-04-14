@@ -1,47 +1,25 @@
 ```
-# Flutter/Dart
+# Build artifacts
+build/
+# Dependencies
+.pub/
 .dart_tool/
 .packages
-.pub-cache/
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# Build directories
-build/
-android/.gradle/
-android/build/
-ios/Pods/
-ios/.symlinks/
-ios/build/
-
+# Logs and temp files
+*.log
+*.tmp
+*.swp
 # Environment
 .env
 .env.local
 *.env.*
-
-# Logs
-*.log
-**/logs
-
-# Dependencies
-node_modules/
-**/node_modules/
-
-# OS generated files
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.swp
-*~
 ```
