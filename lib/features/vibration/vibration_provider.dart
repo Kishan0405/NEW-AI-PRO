@@ -27,13 +27,29 @@ class VibrationProvider extends ChangeNotifier {
   }
 
   /// Vibrate with pattern for object detection including spatial awareness
-  Future<void> vibrateForObject({bool isPriority = false, String spatialLocation = 'center'}) async {
+  Future<void> vibrateForObject({bool isPriority = false, String spatialLocation = 'center', double? area}) async {
     if (!_isVibrationEnabled || !_hasVibrator) return;
     
     try {
+      if (area != null) {
+        // Distance-based vibration mapping
+        if (area > 100000) {
+          // Extremely close: Continuous pulse
+          await Vibration.cancel();
+          await Vibration.vibrate(pattern: [0, 500, 50, 500], intensities: [0, 255, 0, 255], repeat: 0);
+          Future.delayed(const Duration(milliseconds: 600), () => Vibration.cancel());
+        } else if (area > 30000) {
+          // Medium distance: Steady double pulse
+          await Vibration.vibrate(pattern: [0, 150, 100, 150], intensities: [0, 180, 0, 180]);
+        } else {
+          // Far: Light single tap
+          await Vibration.vibrate(duration: 50, amplitude: 100);
+        }
+        return;
+      }
+
+      // Fallback to priority/location based logic if area is not provided
       if (isPriority) {
-        // Stronger vibration for priority objects
-        // Use different patterns for left/center/right
         if (spatialLocation.contains('left')) {
           await Vibration.vibrate(pattern: [0, 100, 50, 100], intensities: [0, 255, 0, 100]);
         } else if (spatialLocation.contains('right')) {
@@ -42,7 +58,6 @@ class VibrationProvider extends ChangeNotifier {
           await Vibration.vibrate(duration: 200, amplitude: 255);
         }
       } else {
-        // Light vibration for regular objects
         await Vibration.vibrate(duration: 50, amplitude: 128);
       }
     } catch (e) {

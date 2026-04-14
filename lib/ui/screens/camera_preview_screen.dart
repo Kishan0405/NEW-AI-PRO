@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:camera/camera.dart';
@@ -8,7 +9,6 @@ import 'package:ai_vision_pro/features/vibration/vibration_provider.dart';
 import 'package:ai_vision_pro/features/voice_command/voice_command_provider.dart';
 import 'package:ai_vision_pro/features/accessibility/accessibility_provider.dart';
 
-/// Camera preview screen with real-time detection overlay
 class CameraPreviewScreen extends StatefulWidget {
   const CameraPreviewScreen({super.key});
 
@@ -33,20 +33,18 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
       if (context.read<AccessibilityProvider>().isVoiceGuidanceEnabled) {
         await ttsProvider.speak(text, interrupt: false);
         
-        // Check for priority objects for vibration
-        final priorityDetections = detectionProvider.currentDetections
-            .where((d) => detectionProvider.getObstaclePriority(d.label) == ObstaclePriority.critical)
-            .toList();
-        
-        if (priorityDetections.isNotEmpty && context.read<AccessibilityProvider>().isHapticFeedbackEnabled) {
+        if (detectionProvider.currentDetections.isNotEmpty && context.read<AccessibilityProvider>().isHapticFeedbackEnabled) {
+          final firstObj = detectionProvider.currentDetections.first;
+          final area = firstObj.boundingBox != null 
+              ? firstObj.boundingBox!.width * firstObj.boundingBox!.height 
+              : 0.0;
+              
+          final isPriority = detectionProvider.getObstaclePriority(firstObj.label) == ObstaclePriority.critical;
+          
           vibrationProvider.vibrateForObject(
-            isPriority: true,
-            spatialLocation: priorityDetections.first.spatialLocation,
-          );
-        } else if (detectionProvider.currentDetections.isNotEmpty && context.read<AccessibilityProvider>().isHapticFeedbackEnabled) {
-          vibrationProvider.vibrateForObject(
-            isPriority: false,
-            spatialLocation: detectionProvider.currentDetections.first.spatialLocation,
+            isPriority: isPriority, 
+            spatialLocation: firstObj.spatialLocation,
+            area: area,
           );
         }
       }
@@ -55,56 +53,26 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
 
   void _startVoiceCommandListener() {
     final voiceCommandProvider = context.read<VoiceCommandProvider>();
-    final ttsProvider = context.read<TTSProvider>();
     final detectionProvider = context.read<DetectionProvider>();
     
     voiceCommandProvider.onVoiceCommand = (command) async {
       switch (command) {
-        case VoiceCommand.startScanning:
-          ttsProvider.speak('Already scanning');
-          break;
-        case VoiceCommand.stopScanning:
-          await _stopScanning();
-          break;
-        case VoiceCommand.readText:
-          detectionProvider.toggleOcr();
-          if (detectionProvider.isOcrEnabled) {
-            ttsProvider.speak('Reading text mode enabled');
-          } else {
-            ttsProvider.speak('Reading text mode disabled');
-          }
-          break;
-        case VoiceCommand.describeSurroundings:
-          ttsProvider.speak('Describing surroundings');
-          await detectionProvider.describeSurroundings();
-          break;
-        case VoiceCommand.emergency:
-          _triggerEmergency();
-          break;
-        case VoiceCommand.unknown:
-          break;
+        case VoiceCommand.stopScanning: await _stopScanning(); break;
+        case VoiceCommand.readText: detectionProvider.toggleOcr(); break;
+        case VoiceCommand.describeSurroundings: await detectionProvider.describeSurroundings(); break;
+        case VoiceCommand.emergency: _triggerEmergency(); break;
+        default: break;
       }
     };
   }
 
   Future<void> _stopScanning() async {
-    final cameraProvider = context.read<CameraProvider>();
-    final ttsProvider = context.read<TTSProvider>();
-    
-    await cameraProvider.stopStream();
-    ttsProvider.speak('Scanning stopped');
-    
-    if (mounted) {
-      Navigator.pop(context);
-    }
+    await context.read<CameraProvider>().stopStream();
+    if (mounted) Navigator.pop(context);
   }
 
   void _triggerEmergency() {
-    final vibrationProvider = context.read<VibrationProvider>();
-    final ttsProvider = context.read<TTSProvider>();
-    
-    vibrationProvider.vibrateForEmergency();
-    ttsProvider.speak('Emergency alert activated');
+    context.read<VibrationProvider>().vibrateForEmergency();
   }
 
   @override
@@ -114,234 +82,146 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
     final accessibilityProvider = context.watch<AccessibilityProvider>();
     
     if (!cameraProvider.isInitialized || cameraProvider.controller == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Colors.white)));
     }
 
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Camera preview
-          Positioned.fill(
-            child: CameraPreview(cameraProvider.controller!),
-          ),
+          Positioned.fill(child: CameraPreview(cameraProvider.controller!)),
+          Positioned.fill(child: CustomPaint(painter: DetectionOverlayPainter(detections: detectionProvider.currentDetections))),
           
-          // Detection overlay
-          Positioned.fill(
-            child: CustomPaint(
-              painter: DetectionOverlayPainter(
-                detections: detectionProvider.currentDetections,
-              ),
-            ),
-          ),
+          Positioned(top: 0, left: 0, right: 0, child: _buildTopGlassBar(accessibilityProvider, detectionProvider)),
+          Positioned(bottom: 0, left: 0, right: 0, child: _buildBottomGlassControls()),
           
-          // Top bar with status
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _buildTopBar(accessibilityProvider, detectionProvider),
-          ),
-          
-          // Bottom controls
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildBottomControls(),
-          ),
-          
-          // Current detection indicator
           if (detectionProvider.currentDetections.isNotEmpty)
-            Positioned(
-              top: 100,
-              left: 16,
-              right: 16,
-              child: _buildDetectionIndicator(detectionProvider),
-            ),
+            Positioned(top: 120, left: 20, right: 20, child: _buildGlassDetectionIndicator(detectionProvider)),
         ],
       ),
     );
   }
 
-  Widget _buildTopBar(AccessibilityProvider accessibilityProvider, DetectionProvider detectionProvider) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // OCR status
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: detectionProvider.isOcrEnabled ? Colors.orange : Colors.grey,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.text_fields,
-                  size: 20 * accessibilityProvider.textScaleFactor,
-                  color: Colors.white,
+  Widget _buildTopGlassBar(AccessibilityProvider accessibilityProvider, DetectionProvider detectionProvider) {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.only(top: 60, bottom: 20, left: 20, right: 20),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.3),
+            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: detectionProvider.isOcrEnabled ? Colors.orangeAccent.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  detectionProvider.isOcrEnabled ? 'OCR ON' : 'OCR OFF',
-                  style: TextStyle(
-                    fontSize: 14 * accessibilityProvider.textScaleFactor,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                child: Row(
+                  children: [
+                    Icon(Icons.text_fields, size: 20, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(detectionProvider.isOcrEnabled ? 'OCR ACTIVE' : 'OCR OFF', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          
-          // Stop button
-          Semantics(
-            label: 'Stop scanning. Double tap to stop.',
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.stop, size: 36, color: Colors.red),
-              onPressed: () => _stopScanning(),
-              padding: const EdgeInsets.all(12),
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomControls() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.black.withValues(alpha: 0.9), Colors.transparent],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // Toggle OCR
-          _buildControlButton(
-            icon: Icons.text_fields,
-            label: 'Read Text',
-            onPressed: () {
-              context.read<DetectionProvider>().toggleOcr();
-            },
-          ),
-          
-          // Describe surroundings
-          _buildControlButton(
-            icon: Icons.visibility,
-            label: 'What\'s Around?',
-            onPressed: () {
-              context.read<DetectionProvider>().describeSurroundings();
-            },
-          ),
-          
-          // Flash toggle
-          _buildControlButton(
-            icon: Icons.flash_on,
-            label: 'Flash',
-            onPressed: () {
-              context.read<CameraProvider>().toggleFlash();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    final accessibilityProvider = context.watch<AccessibilityProvider>();
-    
-    return Semantics(
-      label: '$label. Double tap to activate.',
-      button: true,
-      child: GestureDetector(
-        onTap: onPressed,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 28, color: Colors.white),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12 * accessibilityProvider.textScaleFactor,
-                color: Colors.white,
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 32, color: Colors.white),
+                onPressed: () => _stopScanning(),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildDetectionIndicator(DetectionProvider detectionProvider) {
-    final accessibilityProvider = context.watch<AccessibilityProvider>();
-    
-    if (detectionProvider.currentDetections.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    
-    final topDetections = detectionProvider.currentDetections.take(3).toList();
-    
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue, width: 2),
+  Widget _buildBottomGlassControls() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          padding: const EdgeInsets.only(top: 24, bottom: 40),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.4),
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildControlIcon(Icons.text_fields, 'Read', () => context.read<DetectionProvider>().toggleOcr()),
+              _buildControlIcon(
+                Icons.visibility, 
+                'Describe', 
+                () => context.read<DetectionProvider>().describeSurroundings(useAdvancedAI: true), 
+                isLarge: true
+              ),
+              _buildControlIcon(Icons.flash_on, 'Flash', () => context.read<CameraProvider>().toggleFlash()),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildControlIcon(IconData icon, String label, VoidCallback onPressed, {bool isLarge = false}) {
+    return GestureDetector(
+      onTap: onPressed,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Detected:',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
+          Container(
+            padding: EdgeInsets.all(isLarge ? 24 : 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
             ),
+            child: Icon(icon, size: isLarge ? 36 : 24, color: Colors.white),
           ),
           const SizedBox(height: 8),
-          ...topDetections.map((detection) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              '${detection.label} (${(detection.confidence * 100).toInt()}%)',
-              style: TextStyle(
-                fontSize: 14 * accessibilityProvider.textScaleFactor,
-                color: Colors.white,
-              ),
-            ),
-          )),
+          Text(label, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGlassDetectionIndicator(DetectionProvider detectionProvider) {
+    final topDetections = detectionProvider.currentDetections.take(3).toList();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.5), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Active Detections', style: TextStyle(fontSize: 14, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...topDetections.map((d) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(d.label.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text('${(d.confidence * 100).toInt()}%', style: const TextStyle(color: Colors.white70)),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -353,22 +233,17 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   }
 }
 
-/// Custom painter to draw bounding boxes around detected objects
 class DetectionOverlayPainter extends CustomPainter {
   final List<AppDetectedObject> detections;
-  
   DetectionOverlayPainter({required this.detections});
   
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.green
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke;
+    final boxPaint = Paint()..color = Colors.blueAccent.withValues(alpha: 0.6)..strokeWidth = 3.0..style = PaintingStyle.stroke;
+    final fillPaint = Paint()..color = Colors.blueAccent.withValues(alpha: 0.1)..style = PaintingStyle.fill;
     
     for (final detection in detections) {
       if (detection.boundingBox != null) {
-        // Convert bounding box to screen coordinates
         final rect = Rect.fromLTWH(
           detection.boundingBox!.left * size.width,
           detection.boundingBox!.top * size.height,
@@ -376,29 +251,14 @@ class DetectionOverlayPainter extends CustomPainter {
           detection.boundingBox!.height * size.height,
         );
         
-        canvas.drawRect(rect, paint);
-        
-        // Draw label
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: detection.label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(rect.left, rect.top - 20));
+        // Rounded Glowing Bounding Boxes
+        final rRect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
+        canvas.drawRRect(rRect, fillPaint);
+        canvas.drawRRect(rRect, boxPaint);
       }
     }
   }
   
   @override
-  bool shouldRepaint(covariant DetectionOverlayPainter oldDelegate) {
-    return oldDelegate.detections != detections;
-  }
+  bool shouldRepaint(covariant DetectionOverlayPainter oldDelegate) => oldDelegate.detections != detections;
 }

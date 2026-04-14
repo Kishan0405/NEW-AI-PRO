@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ai_vision_pro/features/camera/camera_provider.dart';
@@ -10,7 +11,6 @@ import 'package:ai_vision_pro/core/services/permission_service.dart';
 import 'package:ai_vision_pro/ui/screens/camera_preview_screen.dart';
 import 'package:ai_vision_pro/ui/screens/settings_screen.dart';
 
-/// Main home screen with accessibility-first design
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -30,25 +30,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkPermissions() async {
     setState(() => _isLoading = true);
-    
     _hasCameraPermission = await PermissionService().hasCameraPermission();
     await PermissionService().hasMicrophonePermission();
-    
     setState(() => _isLoading = false);
   }
 
   Future<void> _requestPermissions() async {
     final cameraGranted = await PermissionService().requestCameraPermission();
     await PermissionService().requestMicrophonePermission();
-    
-    setState(() {
-      _hasCameraPermission = cameraGranted;
-    });
-    
-    // Process mic permission result if needed elsewhere or just let it be
-    if (cameraGranted) {
-      _initializeServices();
-    }
+    setState(() { _hasCameraPermission = cameraGranted; });
+    if (cameraGranted) _initializeServices();
   }
 
   Future<void> _initializeServices() async {
@@ -60,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await vibrationProvider.initialize();
     await voiceCommandProvider.initialize();
     
-    // Announce app is ready
     if (context.read<AccessibilityProvider>().isVoiceGuidanceEnabled) {
       ttsProvider.speak('AI Vision Pro ready. Tap start to begin scanning.');
     }
@@ -71,29 +61,54 @@ class _HomeScreenState extends State<HomeScreen> {
     final accessibilityProvider = context.watch<AccessibilityProvider>();
     
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: const Color(0xFF0F0F13), // Deep Gemini Dark
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         title: Semantics(
           label: 'AI Vision Pro',
-          child: const Text('AI VISION PRO'),
+          child: const Text('AI VISION PRO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
+            icon: const Icon(Icons.settings, color: Colors.white70),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             tooltip: 'Settings',
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : !_hasCameraPermission
-              ? _buildPermissionRequired()
-              : _buildMainContent(accessibilityProvider),
+      body: Stack(
+        children: [
+          // Glowing Ambient Background (Gemini Vibe)
+          Positioned(
+            top: -100, left: -100,
+            child: Container(
+              width: 300, height: 300,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.blue.withValues(alpha: 0.2)),
+            ),
+          ),
+          Positioned(
+            bottom: -50, right: -50,
+            child: Container(
+              width: 350, height: 350,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purple.withValues(alpha: 0.15)),
+            ),
+          ),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+            child: Container(color: Colors.transparent),
+          ),
+          
+          SafeArea(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                : !_hasCameraPermission
+                    ? _buildPermissionRequired()
+                    : _buildMainContent(accessibilityProvider),
+          ),
+        ],
+      ),
     );
   }
 
@@ -104,27 +119,18 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Semantics(
-              label: 'Camera permission required. Tap button to grant permission.',
-              child: const Icon(
-                Icons.no_photography,
-                size: 80,
-                color: Colors.grey,
-              ),
-            ),
+            const Icon(Icons.no_photography, size: 80, color: Colors.white54),
             const SizedBox(height: 24),
-            const Text(
-              'Camera permission is required for this app to work.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
+            const Text('Camera permission is required.', style: TextStyle(fontSize: 18, color: Colors.white)),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _requestPermissions,
               icon: const Icon(Icons.camera_alt),
               label: const Text('Grant Camera Permission'),
               style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ],
@@ -134,155 +140,115 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainContent(AccessibilityProvider accessibilityProvider) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Welcome message with glassmorphism
-            Semantics(
-              label: 'Welcome to AI Vision Pro. This app helps you detect objects using your camera.',
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Glassmorphic Hero Card
+          ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
               child: Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.blue.withValues(alpha: 0.3),
-                      Colors.purple.withValues(alpha: 0.1),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
                 ),
                 child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.5)),
-                      ),
-                      child: const Icon(
-                        Icons.auto_awesome,
-                        size: 50,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Colors.blue, Colors.lightBlueAccent, Colors.white],
+                        colors: [Colors.blueAccent, Colors.purpleAccent],
                       ).createShader(bounds),
-                      child: Text(
-                        'AI VISION PRO',
-                        style: TextStyle(
-                          fontSize: 32 * accessibilityProvider.textScaleFactor,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 1.2,
-                        ),
-                        textAlign: TextAlign.center,
+                      child: const Icon(Icons.auto_awesome, size: 48, color: Colors.white),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'AI VISION PRO',
+                      style: TextStyle(
+                        fontSize: 28 * accessibilityProvider.textScaleFactor,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 2.0,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Your AI-powered Visual Companion',
+                      'Your smart environmental guide',
                       style: TextStyle(
-                        fontSize: 16 * accessibilityProvider.textScaleFactor,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontWeight: FontWeight.w300,
+                        fontSize: 14 * accessibilityProvider.textScaleFactor,
+                        color: Colors.white70,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
             ),
-            
-            const Spacer(),
-            
-            // Main action buttons
-            _buildLargeButton(
-              icon: Icons.play_arrow,
-              label: 'Start Scanning',
-              semanticsLabel: 'Start scanning for objects. Double tap to begin.',
-              onPressed: () => _startScanning(),
-              color: Colors.green,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            _buildLargeButton(
-              icon: Icons.text_fields,
-              label: 'Read Text',
-              semanticsLabel: 'Read text from camera. Double tap to enable OCR mode.',
-              onPressed: () => _toggleOcr(),
-              color: Colors.orange,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            _buildLargeButton(
-              icon: Icons.mic,
-              label: 'Voice Commands',
-              semanticsLabel: 'Enable voice commands. Double tap to start listening.',
-              onPressed: () => _startVoiceCommands(),
-              color: Colors.purple,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Emergency button
-            _buildEmergencyButton(),
-            
-            const SizedBox(height: 16),
-          ],
-        ),
+          ),
+          
+          const Spacer(),
+          
+          _buildGlassButton(
+            icon: Icons.camera_alt_outlined,
+            label: 'Start Scanning',
+            color: Colors.blueAccent,
+            onPressed: () => _startScanning(),
+          ),
+          const SizedBox(height: 16),
+          _buildGlassButton(
+            icon: Icons.document_scanner_outlined,
+            label: 'Read Text (OCR)',
+            color: Colors.orangeAccent,
+            onPressed: () => _toggleOcr(),
+          ),
+          const SizedBox(height: 16),
+          _buildGlassButton(
+            icon: Icons.mic_none_outlined,
+            label: 'Voice Commands',
+            color: Colors.purpleAccent,
+            onPressed: () => _startVoiceCommands(),
+          ),
+          const SizedBox(height: 16),
+          _buildEmergencyButton(),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
 
-  Widget _buildLargeButton({
-    required IconData icon,
-    required String label,
-    required String semanticsLabel,
-    required VoidCallback onPressed,
-    required Color color,
-  }) {
-    final accessibilityProvider = context.watch<AccessibilityProvider>();
-    
+  Widget _buildGlassButton({required IconData icon, required String label, required Color color, required VoidCallback onPressed}) {
     return Semantics(
-      label: semanticsLabel,
       button: true,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 36),
-        label: Text(
-          label,
-          style: TextStyle(
-            fontSize: 20 * accessibilityProvider.textScaleFactor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+      label: label,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 32, color: color),
+                  const SizedBox(width: 20),
+                  Text(
+                    label,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.9)),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.5)),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -290,136 +256,77 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmergencyButton() {
-    final accessibilityProvider = context.watch<AccessibilityProvider>();
-    
     return Semantics(
-      label: 'Emergency alert button. Long press to activate emergency alert.',
+      label: 'Emergency alert button. Long press to activate.',
       button: true,
       child: GestureDetector(
         onLongPress: _triggerEmergency,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white, width: 3),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.warning, size: 36, color: Colors.white),
-              const SizedBox(width: 16),
-              Text(
-                'EMERGENCY ALERT',
-                style: TextStyle(
-                  fontSize: 22 * accessibilityProvider.textScaleFactor,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5), width: 2),
               ),
-            ],
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 32, color: Colors.redAccent),
+                  SizedBox(width: 12),
+                  Text('EMERGENCY ALERT', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
+  // --- Handlers remain largely the same ---
   Future<void> _startScanning() async {
     final vibrationProvider = context.read<VibrationProvider>();
     vibrationProvider.vibrateForButtonPress();
-    
     final cameraProvider = context.read<CameraProvider>();
     final detectionProvider = context.read<DetectionProvider>();
     final ttsProvider = context.read<TTSProvider>();
     
-    // Initialize camera if needed
-    if (!cameraProvider.isInitialized) {
-      await cameraProvider.initializeCamera();
-    }
+    if (!cameraProvider.isInitialized) await cameraProvider.initializeCamera();
     
-    // Set up detection callback
-    detectionProvider.onSpeakText = (text) {
-      ttsProvider.speak(text, interrupt: false);
+    detectionProvider.onSpeakText = (text) { ttsProvider.speak(text, interrupt: false); };
+    cameraProvider.onImageAvailable = (image) { 
+      if (!detectionProvider.isProcessing) {
+        detectionProvider.processImage(image);
+      }
     };
     
-    // Connect camera stream to detection
-    cameraProvider.onImageAvailable = (image) {
-      detectionProvider.processImage(image);
-    };
-    
-    // Start camera stream
     await cameraProvider.startStream();
-    
-    // Navigate to camera preview
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CameraPreviewScreen()),
-      );
-    }
+    if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const CameraPreviewScreen()));
   }
 
   Future<void> _toggleOcr() async {
-    final vibrationProvider = context.read<VibrationProvider>();
-    vibrationProvider.vibrateForButtonPress();
-    
+    context.read<VibrationProvider>().vibrateForButtonPress();
     final detectionProvider = context.read<DetectionProvider>();
     final ttsProvider = context.read<TTSProvider>();
-    
     detectionProvider.toggleOcr();
-    
-    if (detectionProvider.isOcrEnabled) {
-      ttsProvider.speak('Text reading enabled. Point camera at text.');
-    } else {
-      ttsProvider.speak('Text reading disabled.');
-    }
+    if (detectionProvider.isOcrEnabled) ttsProvider.speak('Text reading enabled.');
+    else ttsProvider.speak('Text reading disabled.');
   }
 
   Future<void> _startVoiceCommands() async {
-    final vibrationProvider = context.read<VibrationProvider>();
-    vibrationProvider.vibrateForButtonPress();
-    
+    context.read<VibrationProvider>().vibrateForButtonPress();
     final voiceCommandProvider = context.read<VoiceCommandProvider>();
-    final ttsProvider = context.read<TTSProvider>();
-    
-    if (!voiceCommandProvider.isInitialized) {
-      await voiceCommandProvider.initialize();
-    }
-    
+    if (!voiceCommandProvider.isInitialized) await voiceCommandProvider.initialize();
     await voiceCommandProvider.startListening();
-    
-    ttsProvider.speak('Listening for commands. Say: start scanning, stop, read text, or what is around me.');
+    context.read<TTSProvider>().speak('Listening for commands.');
   }
 
   Future<void> _triggerEmergency() async {
-    final vibrationProvider = context.read<VibrationProvider>();
-    final ttsProvider = context.read<TTSProvider>();
-    
-    vibrationProvider.vibrateForEmergency();
-    ttsProvider.speak('Emergency alert activated. Help is on the way.');
-    
-    // Show emergency dialog
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('EMERGENCY ALERT'),
-          content: const Text(
-            'Emergency alert has been activated. Vibrating and announcing location.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                vibrationProvider.stopVibration();
-                ttsProvider.stop();
-                Navigator.pop(context);
-              },
-              child: const Text('DEACTIVATE'),
-            ),
-          ],
-        ),
-      );
-    }
+    context.read<VibrationProvider>().vibrateForEmergency();
+    context.read<TTSProvider>().speak('Emergency alert activated.');
   }
 }
