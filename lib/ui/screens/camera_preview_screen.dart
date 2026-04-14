@@ -186,36 +186,63 @@ class _CameraPreviewScreenState extends State<CameraPreviewScreen> {
   }
 
   Widget _buildGlassDetectionIndicator(DetectionProvider detectionProvider) {
-    final topDetections = detectionProvider.currentDetections.take(3).toList();
+    final topDetections = detectionProvider.currentDetections.take(5).toList();
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: const EdgeInsets.all(16),
+          constraints: const BoxConstraints(maxHeight: 240),
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.5), width: 1.5),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Active Detections', style: TextStyle(fontSize: 14, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ...topDetections.map((d) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(d.label.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Active Detections', style: TextStyle(fontSize: 14, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 8),
-                    Text('${(d.confidence * 100).toInt()}%', style: const TextStyle(color: Colors.white70)),
-                  ],
-                ),
-              )),
+                    child: Text('${detectionProvider.currentDetections.length}', style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...topDetections.map((d) {
+                final confPercent = (d.confidence * 100).toInt();
+                final confColor = confPercent >= 80
+                    ? Colors.greenAccent
+                    : confPercent >= 60
+                        ? Colors.yellowAccent
+                        : Colors.orangeAccent;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 6, height: 6,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: confColor),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(d.label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('$confPercent%', style: TextStyle(color: confColor, fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                );
+              }),
             ],
           ),
         ),
